@@ -5,11 +5,10 @@ usage example:
 python MedSAM_Inference.py -i assets/img_demo.png -o ./ --box "[95,255,190,350]"
 
 """
-
-# %% load environment
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from PIL import Image
 import os
 
 join = os.path.join
@@ -18,6 +17,7 @@ from segment_anything import sam_model_registry
 from skimage import io, transform
 import torch.nn.functional as F
 import argparse
+from time import time
 
 
 def get_bounding_boxes(test_gt_mask, buffer=0):
@@ -84,10 +84,13 @@ def medsam_inference(medsam_model, img_embed, box_1024, H, W):
     )  # (1, 1, gt.shape)
     low_res_pred = low_res_pred.squeeze().cpu().numpy()  # (256, 256)
     medsam_seg = (low_res_pred > 0.5).astype(np.uint8)
-    return medsam_seg
+    if medsam_seg.shape[0] > 1:
+        agg_medsam_seg = np.any(medsam_seg == 1, axis=0).astype(np.uint8)
+    else:
+        agg_medsam_seg = medsam_seg
+    return agg_medsam_seg
 
-
-# %% load model and image
+start = time()
 parser = argparse.ArgumentParser(
     description="run inference on testing set based on MedSAM"
 )
@@ -102,7 +105,7 @@ parser.add_argument(
     "-o",
     "--seg_path",
     type=str,
-    default="assets/",
+    default="/hpc/group/yizhanglab/zs144/Zion-ZhangLab/experiments/EXP003/images/",
     help="path to the segmentation folder",
 )
 parser.add_argument(
@@ -116,7 +119,7 @@ parser.add_argument(
     "-chk",
     "--checkpoint",
     type=str,
-    default="work_dir/MedSAM/medsam_vit_b.pth",
+    default="/hpc/group/yizhanglab/zs144/resources/MedSAM/original_ckpt/medsam_vit_b.pth",
     help="path to the trained model",
 )
 args = parser.parse_args()
@@ -132,7 +135,8 @@ if len(img_np.shape) == 2:
 else:
     img_3c = img_np
 H, W, _ = img_3c.shape
-# %% image preprocessing
+gt_mask = io.imread(args.gt_mask_path)
+
 img_1024 = transform.resize(
     img_3c, (1024, 1024), order=3, preserve_range=True, anti_aliasing=True
 ).astype(np.uint8)
@@ -144,20 +148,25 @@ img_1024_tensor = (
     torch.tensor(img_1024).float().permute(2, 0, 1).unsqueeze(0).to(device)
 )
 
-bboxes_np = get_bounding_boxes(img_np)
+bboxes_np = get_bounding_boxes(gt_mask)
 # transfer box_np t0 1024x1024 scale
 bboxes_1024 = bboxes_np / np.array([W, H, W, H]) * 1024
 with torch.no_grad():
     image_embedding = medsam_model.image_encoder(img_1024_tensor)  # (1, 256, 64, 64)
 
 medsam_seg = medsam_inference(medsam_model, image_embedding, bboxes_1024, H, W)
+medsam_seg = (medsam_seg * 255).astype(np.uint8)
+print(f"medsam_seg shape: {medsam_seg.shape}")
 io.imsave(
     join(args.seg_path, "seg_" + os.path.basename(args.image_path)),
     medsam_seg,
     check_contrast=False,
 )
 
-# %% visualize results
+end = time()
+duration = (end - start) / 60
+print(f"Time elapse: {duration:.2f} min.")
+
 fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 ax[0].imshow(img_3c)
 show_box(bboxes_np, ax[0])
