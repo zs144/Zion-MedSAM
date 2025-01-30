@@ -107,9 +107,12 @@ def medsam_inference(medsam_model, img_embed, box_1024, H, W):
     return agg_medsam_seg
 #%%
 start = time()
-image_path  = "/hpc/group/yizhanglab/zs144/Zion-ZhangLab/experiments/EXP003/images/patch_6_8.png"
-seg_path    = "/hpc/group/yizhanglab/zs144/Zion-ZhangLab/experiments/EXP003/images/"
-gt_mask_path= "/hpc/group/yizhanglab/zs144/Zion-ZhangLab/experiments/EXP003/images/gt_mask_6_8.png"
+patch_col_id = 6
+patch_row_id = 8
+pwd = f"/hpc/group/yizhanglab/zs144/Zion-ZhangLab/experiments/EXP003/images/test_patch_{patch_col_id}_{patch_row_id}/"
+image_path  = pwd + f"patch_{patch_col_id}_{patch_row_id}.png"
+seg_path    = pwd
+gt_mask_path= pwd + f"gt_mask_{patch_col_id}_{patch_row_id}.png"
 device      = "cuda:0"
 checkpoint  = "/hpc/group/yizhanglab/zs144/resources/MedSAM/original_ckpt/medsam_vit_b.pth"
 
